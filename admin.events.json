@@ -1,0 +1,60 @@
+[{
+  "_id": {
+    "$oid": "6948c4b8830e21920d40c4fe"
+  },
+  "id": "BKG001",
+  "event": {
+    "eventId": "EVT1001",
+    "title": "Music Concert",
+    "location": "Ahmedabad",
+    "date": "2025-01-15",
+    "time": "07:00 PM"
+  },
+  "seats": [
+    {
+      "seatNumber": "A1",
+      "price": 500
+    },
+    {
+      "seatNumber": "A2",
+      "price": 500
+    }
+  ],
+  "customerName": "Rahul Patel",
+  "customerEmail": "rahul@gmail.com",
+  "customerPhone": "9876543210",
+  "totalAmount": 1000,
+  "bookingDate": "2025-01-01"
+},
+{
+  "_id": {
+    "$oid": "6948c4b8830e21920d40c4ff"
+  },
+  "id": "BKG002",
+  "event": {
+    "eventId": "EVT1002",
+    "title": "Movie Night",
+    "location": "PVR Cinema",
+    "date": "2025-01-20",
+    "time": "09:30 PM"
+  },
+  "seats": [
+    {
+      "seatNumber": "B5",
+      "price": 300
+    },
+    {
+      "seatNumber": "B6",
+      "price": 300
+    },
+    {
+      "seatNumber": "B7",
+      "price": 300
+    }
+  ],
+  "customerName": "Amit Shah",
+  "customerEmail": "amit@gmail.com",
+  "customerPhone": "9123456780",
+  "totalAmount": 900,
+  "bookingDate": "2025-01-05"
+}]
