@@ -2,6 +2,8 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 dotenv.config();
 
@@ -13,9 +15,9 @@ app.use(cors());
 app.use(express.json());
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/')
-.then(() => console.log('MongoDB connected'))
-.catch(err => console.error('MongoDB connection error:', err));
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/ticket-booking')
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
 // Define Schemas
 const eventSchema = new mongoose.Schema({
@@ -31,22 +33,31 @@ const eventSchema = new mongoose.Schema({
 
 const bookingSchema = new mongoose.Schema({
   event: eventSchema,
-  seats: [{ id: String, row: String, number: Number }],
+  seats: [{ id: String, row: String, number: Number, price: Number }],
   customerName: String,
   customerEmail: String,
   customerPhone: String,
   totalAmount: Number,
   bookingDate: String,
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
+});
+
+const userSchema = new mongoose.Schema({
+  name: String,
+  email: { type: String, unique: true },
+  phone: String,
+  password: String,
+  role: { type: String, default: 'user' },
 });
 
 // Models
 const Event = mongoose.model('Event', eventSchema);
 const Booking = mongoose.model('Booking', bookingSchema);
+const User = mongoose.models.User || mongoose.model('User', userSchema);
 
 // Routes
 app.get('/api/events', async (req, res) => {
   try {
-    debugger;
      const events = await Event.find();
      const eventsWithId = events.map(event => ({ ...event.toObject(), id: event._id.toString() }));
     // const eventsWithId = [
@@ -89,20 +100,60 @@ app.post('/api/events', async (req, res) => {
   }
 });
 
+// GET bookings
+// If query param mine=true is provided, require Authorization: Bearer <token> and return only the requesting user's bookings
 app.get('/api/bookings', async (req, res) => {
   try {
-    // const bookings = await Booking.find();
-    // const bookingsWithId = bookings.map(booking => ({ ...booking.toObject(), id: booking._id.toString() }));
-    const bookingsWithId = [];
+    if (req.query.mine === 'true') {
+      const auth = req.headers.authorization || '';
+      if (!auth.startsWith('Bearer ')) return res.status(401).json({ error: 'No token' });
+      const token = auth.slice(7);
+      const secret = process.env.JWT_SECRET || 'change_this_secret';
+      let payload;
+      try {
+        payload = jwt.verify(token, secret);
+      } catch (e) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+      const userId = payload.id;
+      const bookings = await Booking.find({ user: userId });
+      const bookingsWithId = bookings.map(booking => ({ ...booking.toObject(), id: booking._id.toString() }));
+      return res.json(bookingsWithId);
+    }
+
+    const bookings = await Booking.find();
+    const bookingsWithId = bookings.map(booking => ({ ...booking.toObject(), id: booking._id.toString() }));
     res.json(bookingsWithId);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+// Create booking (if Authorization header with JWT present, attach booking to user)
 app.post('/api/bookings', async (req, res) => {
   try {
-    const booking = new Booking(req.body);
+    const data = { ...req.body };
+
+    // If token provided, attach user id and ensure customerEmail matches user's email
+    const auth = req.headers.authorization || '';
+    if (auth.startsWith('Bearer ')) {
+      try {
+        const token = auth.slice(7);
+        const secret = process.env.JWT_SECRET || 'change_this_secret';
+        const payload = jwt.verify(token, secret);
+        const user = await User.findById(payload.id);
+        if (user) {
+          data.user = user._id;
+          data.customerEmail = user.email;
+          data.customerName = data.customerName || user.name;
+          data.customerPhone = data.customerPhone || user.phone;
+        }
+      } catch (e) {
+        // ignore token errors - proceed without user
+      }
+    }
+
+    const booking = new Booking(data);
     await booking.save();
     res.json({ ...booking.toObject(), id: booking._id.toString() });
   } catch (err) {
@@ -146,6 +197,99 @@ app.delete('/api/bookings/:id', async (req, res) => {
   }
 });
 
+// Newsletter and Contacts
+const newsletterSchema = new mongoose.Schema({
+  email: { type: String, unique: true },
+  subscribedAt: { type: Date, default: Date.now },
+});
+
+const contactSchema = new mongoose.Schema({
+  name: String,
+  email: String,
+  phone: String,
+  message: String,
+  createdAt: { type: Date, default: Date.now },
+});
+
+const Newsletter = mongoose.models.Newsletter || mongoose.model('Newsletter', newsletterSchema);
+const Contact = mongoose.models.Contact || mongoose.model('Contact', contactSchema);
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+app.post('/api/newsletter', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !emailRegex.test(email)) return res.status(400).json({ error: 'Invalid email' });
+
+    const exists = await Newsletter.findOne({ email });
+    if (exists) return res.status(409).json({ error: 'Already subscribed' });
+
+    const n = new Newsletter({ email });
+    await n.save();
+    res.json({ id: n._id, email: n.email });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/contacts', async (req, res) => {
+  try {
+    const { name, email, phone, message } = req.body;
+    if (!name || !message || !email || !emailRegex.test(email)) return res.status(400).json({ error: 'Invalid contact data' });
+    const cleanedPhone = phone ? phone.replace(/[^\d]/g, '') : '';
+    if (!cleanedPhone || cleanedPhone.length !== 10) return res.status(400).json({ error: 'Invalid phone' });
+
+    const c = new Contact({ name, email, phone, message });
+    await c.save();
+    res.json({ id: c._id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// User login (returns JWT)
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Missing credentials' });
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+
+    const secret = process.env.JWT_SECRET || 'change_this_secret';
+    const token = jwt.sign({ id: user._id.toString(), role: user.role }, secret, { expiresIn: '7d' });
+
+    const safeUser = { id: user._id.toString(), name: user.name, email: user.email, phone: user.phone, role: user.role };
+    res.json({ user: safeUser, token });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get current user profile
+app.get('/api/me', async (req, res) => {
+  try {
+    const auth = req.headers.authorization || '';
+    if (!auth.startsWith('Bearer ')) return res.status(401).json({ error: 'No token' });
+    const token = auth.slice(7);
+    const secret = process.env.JWT_SECRET || 'change_this_secret';
+    let payload;
+    try {
+      payload = jwt.verify(token, secret);
+    } catch (e) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    const user = await User.findById(payload.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ id: user._id.toString(), name: user.name, email: user.email, phone: user.phone, role: user.role });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

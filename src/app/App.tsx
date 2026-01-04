@@ -8,6 +8,8 @@ import { AdminLogin } from "./components/AdminLogin";
 import { AdminDashboard } from "./components/AdminDashboard";
 import { Button } from "./components/Button";
 import { Ticket, Search, Shield } from "lucide-react";
+import { Landing } from "./components/Landing";
+import { UserLogin } from "./components/UserLogin";
 
 export interface Booking {
   id: string;
@@ -20,41 +22,87 @@ export interface Booking {
   bookingDate: string;
 }
 
-type BookingStep = "browse" | "select-seats" | "booking-form" | "confirmation" | "my-bookings" | "admin-login" | "admin-dashboard";
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
+type BookingStep = "home" | "browse" | "select-seats" | "booking-form" | "confirmation" | "my-bookings" | "login" | "admin-login" | "admin-dashboard";
 
 function App() {
   const [events, setEvents] = useState<Event[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [currentStep, setCurrentStep] = useState<BookingStep>("browse");
+  const [currentStep, setCurrentStep] = useState<BookingStep>("home");
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const raw = localStorage.getItem('user');
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  });
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [selectedSeats, setSelectedSeats] = useState<Seat[]>([]);
   const [latestBooking, setLatestBooking] = useState<Booking | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [myBookings, setMyBookings] = useState<Booking[]>([]);
 
-  // Fetch events and bookings on mount
+  // Fetch events on mount
   useEffect(() => {
     const fetchData = async () => {
       try {
-        debugger;
         console.log('Fetching events...');
         const eventsResponse = await fetch('http://localhost:5000/api/events');
         const eventsData = await eventsResponse.json();
         console.log('Fetched events:', eventsData);
         setEvents(eventsData);
-
-        console.log('Fetching bookings...');
-        const bookingsResponse = await fetch('http://localhost:5000/api/bookings');
-        const bookingsData = await bookingsResponse.json();
-        console.log('Fetched bookings:', bookingsData);
-        setBookings(bookingsData);
       } catch (error) {
-       console.error('Error Fetching data:', error);
+       console.error('Error fetching data:', error);
       }
     };
     fetchData();
   }, []);
+
+  // Fetch bookings for the logged-in user
+  const fetchMyBookings = async (token?: string) => {
+    try {
+      const t = token || localStorage.getItem('token');
+      if (!t) {
+        setMyBookings([]);
+        setBookings([]);
+        return;
+      }
+      const res = await fetch('http://localhost:5000/api/bookings?mine=true', {
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      if (!res.ok) {
+        console.error('Failed to fetch user bookings', res.status);
+        setMyBookings([]);
+        setBookings([]);
+        return;
+      }
+      const data = await res.json();
+      setMyBookings(data);
+      // Also set shared bookings so seat availability reflects the user's bookings
+      setBookings(data);
+    } catch (err) {
+      console.error('Error fetching my bookings:', err);
+      setMyBookings([]);
+      setBookings([]);
+    }
+  };
+
+  useEffect(() => {
+    if (user) fetchMyBookings();
+    else {
+      setMyBookings([]);
+      setBookings([]);
+    }
+  }, [user]);
 
   // Admin functions
   const handleAdminLogin = () => {
@@ -124,11 +172,10 @@ function App() {
     }
   };
 
-  const handleBookingSubmit = (bookingData: BookingData) => {
+  const handleBookingSubmit = async (bookingData: BookingData) => {
     if (!selectedEvent) return;
 
-    const booking: Booking = {
-      id: `BK${Date.now().toString().slice(-8)}`,
+    const payload = {
       event: selectedEvent,
       seats: selectedSeats,
       customerName: bookingData.name,
@@ -142,9 +189,63 @@ function App() {
       }),
     };
 
-    setBookings([...bookings, booking]);
-    setLatestBooking(booking);
-    setCurrentStep("confirmation");
+    try {
+      const token = localStorage.getItem('token');
+      const headers: any = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const response = await fetch('http://localhost:5000/api/bookings', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) throw new Error(`Server responded ${response.status}`);
+
+      const saved = await response.json();
+      // Server returns the saved booking with `id` property
+      const bookingFromServer: Booking = {
+        id: saved.id || (saved._id ? String(saved._id) : `BK${Date.now().toString().slice(-8)}`),
+        event: saved.event,
+        seats: saved.seats,
+        customerName: saved.customerName,
+        customerEmail: saved.customerEmail,
+        customerPhone: saved.customerPhone,
+        totalAmount: saved.totalAmount,
+        bookingDate: saved.bookingDate,
+      };
+
+      // If this booking belongs to the logged-in user, refresh their bookings
+      if (user) {
+        await fetchMyBookings();
+      } else {
+        setBookings((prev) => [...prev, bookingFromServer]);
+      }
+
+      setLatestBooking(bookingFromServer);
+      setCurrentStep("confirmation");
+    } catch (error) {
+      console.error('Error creating booking on server, falling back to local:', error);
+      // Fallback: create locally so UX is preserved
+      const booking: Booking = {
+        id: `BK${Date.now().toString().slice(-8)}`,
+        event: selectedEvent,
+        seats: selectedSeats,
+        customerName: bookingData.name,
+        customerEmail: bookingData.email,
+        customerPhone: bookingData.phone,
+        totalAmount: selectedSeats.reduce((sum, seat) => sum + seat.price, 0),
+        bookingDate: new Date().toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }),
+      };
+
+      setBookings((prev) => [...prev, booking]);
+      setLatestBooking(booking);
+      setCurrentStep("confirmation");
+    }
   };
 
   const handleBackToBrowse = () => {
@@ -154,7 +255,8 @@ function App() {
     setLatestBooking(null);
   };
 
-  const handleViewBookings = () => {
+  const handleViewBookings = async () => {
+    if (user) await fetchMyBookings();
     setCurrentStep("my-bookings");
   };
 
@@ -169,6 +271,9 @@ function App() {
     return matchesSearch && matchesCategory;
   });
 
+  // Bookings for the logged-in user
+  // `myBookings` is now managed in state (`myBookings` state) and fetched from the server when user logs in.
+
   // Get booked seats for the selected event
   const bookedSeatsForEvent = selectedEvent
     ? bookings
@@ -182,7 +287,7 @@ function App() {
       <header className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 cursor-pointer" onClick={handleBackToBrowse}>
+            <div className="flex items-center gap-2 cursor-pointer" onClick={() => setCurrentStep('home')}>
               <Ticket className="size-8 text-blue-600" />
               <h1>TicketBook</h1>
             </div>
@@ -197,14 +302,29 @@ function App() {
                     <Shield className="size-4 mr-2" />
                     Admin
                   </Button>
+
+                    {user && (
                   <Button
                     variant={currentStep === "my-bookings" ? "primary" : "outline"}
                     onClick={handleViewBookings}
                     size="sm"
                   >
-                    My Bookings ({bookings.length})
+                    My Bookings ({myBookings.length})
                   </Button>
+                )}
                 </>
+              )}
+
+              {/* User login */}
+              {!user ? (
+                <Button variant="ghost" onClick={() => setCurrentStep('login')} size="sm">Sign in</Button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">Hi, {user.name}</span>
+                  <Button variant="outline" size="sm" onClick={() => { setUser(null); localStorage.removeItem('user'); }}>
+                    Sign out
+                  </Button>
+                </div>
               )}
             </div>
           </div>
@@ -217,6 +337,13 @@ function App() {
           <AdminLogin onLogin={handleAdminLogin} onBack={handleBackToBrowse} />
         )}
 
+        {currentStep === "login" && (
+          <UserLogin
+            onLogin={(res) => { setUser(res.user); localStorage.setItem('user', JSON.stringify(res.user)); localStorage.setItem('token', res.token); setCurrentStep('browse'); }}
+            onBack={() => setCurrentStep('home')}
+          />
+        )}
+
         {currentStep === "admin-dashboard" && (
           <AdminDashboard
             events={events}
@@ -226,6 +353,12 @@ function App() {
             onEditEvent={handleEditEvent}
             onDeleteEvent={handleDeleteEvent}
           />
+        )}
+
+        {currentStep === "home" && (
+          <div>
+            <Landing events={events} onExplore={() => setCurrentStep('browse')} />
+          </div>
         )}
 
         {currentStep === "browse" && (
@@ -346,6 +479,7 @@ function App() {
               selectedSeats={selectedSeats}
               onSubmit={handleBookingSubmit}
               onBack={() => setCurrentStep("select-seats")}
+              initialData={{ name: user?.name || '', email: user?.email || '', phone: (user as any)?.phone || '' }}
             />
           </div>
         )}
@@ -359,7 +493,7 @@ function App() {
         )}
 
         {currentStep === "my-bookings" && (
-          <BookingList bookings={bookings} onBack={handleBackToBrowse} />
+          <BookingList bookings={user ? myBookings : bookings} onBack={handleBackToBrowse} />
         )}
       </main>
 

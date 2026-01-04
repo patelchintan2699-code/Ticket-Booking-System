@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
 
 dotenv.config();
 
@@ -51,7 +52,7 @@ const seedDB = async () => {
     await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/ticket-booking');
     console.log('MongoDB connected');
 
-    const Event = mongoose.model('Event', new mongoose.Schema({
+    const eventSchema = new mongoose.Schema({
       title: String,
       category: String,
       image: String,
@@ -60,11 +61,74 @@ const seedDB = async () => {
       venue: String,
       price: Number,
       availableSeats: Number,
-    }));
+    });
+
+    const Event = mongoose.models.Event || mongoose.model('Event', eventSchema);
 
     await Event.deleteMany({});
-    await Event.insertMany(events);
+    const insertedEvents = await Event.insertMany(events);
     console.log('Events seeded successfully');
+
+    const bookingSchema = new mongoose.Schema({
+      event: eventSchema,
+      seats: [{ id: String, row: String, number: Number }],
+      customerName: String,
+      customerEmail: String,
+      customerPhone: String,
+      totalAmount: Number,
+      bookingDate: String,
+    });
+
+    const Booking = mongoose.models.Booking || mongoose.model('Booking', bookingSchema);
+
+    await Booking.deleteMany({});
+
+    // Create one sample booking per event
+    const bookings = insertedEvents.map((e, idx) => {
+      const seatsCount = Math.min(4, Math.max(1, Math.floor(Math.random() * 3) + 1)); // 1-3 seats
+      const seats = Array.from({ length: seatsCount }).map((_, sIdx) => {
+        const row = String.fromCharCode(65 + (idx % 6)); // A-F
+        const number = sIdx + 1;
+        return { id: `${row}${number}`, row, number, price: e.price };
+      });
+
+      return {
+        event: e.toObject(),
+        seats,
+        customerName: `Customer ${idx + 1}`,
+        customerEmail: `customer${idx + 1}@example.com`,
+        customerPhone: `+1555000${idx + 1}`,
+        totalAmount: e.price * seats.length,
+        bookingDate: new Date().toISOString(),
+      };
+    });
+
+    await Booking.insertMany(bookings);
+    console.log('Bookings seeded successfully');
+
+    // --- Users seeding ---
+    const hashPassword = (pwd) => bcrypt.hashSync(pwd, 10);
+
+    const users = [
+      { name: 'Alice Johnson', email: 'alice@example.com', phone: '+15550001', password: hashPassword('password123'), role: 'user' },
+      { name: 'Bob Smith', email: 'bob@example.com', phone: '+15550002', password: hashPassword('password123'), role: 'user' },
+      { name: 'Admin User', email: 'admin@example.com', phone: '+15550003', password: hashPassword('adminpass'), role: 'admin' },
+    ];
+
+    const userSchema = new mongoose.Schema({
+      name: String,
+      email: { type: String, unique: true },
+      phone: String,
+      password: String,
+      role: { type: String, default: 'user' },
+    });
+
+    const User = mongoose.models.User || mongoose.model('User', userSchema);
+
+    await User.deleteMany({});
+    await User.insertMany(users);
+    console.log('Users seeded successfully');
+
   } catch (error) {
     console.error('Error seeding database:', error);
   } finally {

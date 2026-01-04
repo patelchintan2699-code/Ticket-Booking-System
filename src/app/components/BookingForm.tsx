@@ -8,6 +8,7 @@ interface BookingFormProps {
   selectedSeats: Seat[];
   onSubmit: (bookingData: BookingData) => void;
   onBack: () => void;
+  initialData?: { name?: string; email?: string; phone?: string };
 }
 
 export interface BookingData {
@@ -16,11 +17,11 @@ export interface BookingData {
   phone: string;
 }
 
-export function BookingForm({ event, selectedSeats, onSubmit, onBack }: BookingFormProps) {
+export function BookingForm({ event, selectedSeats, onSubmit, onBack, initialData }: BookingFormProps) {
   const [formData, setFormData] = useState<BookingData>({
-    name: "",
-    email: "",
-    phone: "",
+    name: initialData?.name || "",
+    email: initialData?.email || "",
+    phone: initialData?.phone || "",
   });
 
   const [errors, setErrors] = useState<Partial<BookingData>>({});
