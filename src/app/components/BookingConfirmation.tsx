@@ -54,7 +54,7 @@ export function BookingConfirmation({ booking, onClose, onViewBookings }: Bookin
             </div>
             <div className="flex justify-between pt-3 border-t">
               <span>Total Paid:</span>
-              <span className="text-green-600">${booking.totalAmount}</span>
+              <span className="text-green-600">₹{booking.totalAmount}</span>
             </div>
           </div>
         </div>

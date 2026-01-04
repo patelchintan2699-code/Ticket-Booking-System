@@ -88,7 +88,8 @@ export function EventManagement({
   };
 
   const getEventBookingStats = (eventId: string) => {
-    const eventBookings = bookings.filter(b => b.event.id === eventId);
+    debugger;
+    const eventBookings = bookings.filter(b => b.event._id === eventId);
     const ticketsSold = eventBookings.reduce((sum, b) => sum + b.seats.length, 0);
     const revenue = eventBookings.reduce((sum, b) => sum + b.totalAmount, 0);
     return { bookings: eventBookings.length, ticketsSold, revenue };
@@ -157,7 +158,7 @@ export function EventManagement({
                     </div>
                     <div>
                       <span className="text-gray-600">Price: </span>
-                      <span>${event.price}</span>
+                      <span>₹{event.price}</span>
                     </div>
                     <div>
                       <span className="text-gray-600">Available Seats: </span>
@@ -176,7 +177,7 @@ export function EventManagement({
                     </div>
                     <div>
                       <span className="text-gray-600">Revenue: </span>
-                      <span className="text-green-600">${stats.revenue}</span>
+                      <span className="text-green-600">₹{stats.revenue}</span>
                     </div>
                   </div>
                 </div>

@@ -3,24 +3,44 @@ import { Button } from "./Button";
 import { Shield, Eye, EyeOff } from "lucide-react";
 
 interface AdminLoginProps {
-  onLogin: () => void;
+  onLogin: (res: { user: any; token: string }) => void;
   onBack: () => void;
 }
 
 export function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
+  const [email, setEmail] = useState("admin@example.com");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Simple password check (in production, this would be secure authentication)
-    if (password === "admin123") {
-      onLogin();
-    } else {
-      setError("Invalid password");
-      setPassword("");
+    setError("");
+
+    try {
+      const res = await fetch('http://localhost:5000/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body?.message || 'Login failed');
+        return;
+      }
+
+      const data = await res.json();
+      // Ensure the authenticated user is an admin
+      if (data.user?.role !== 'admin') {
+        setError('Not an admin account');
+        return;
+      }
+
+      onLogin(data);
+    } catch (err) {
+      console.error(err);
+      setError('Network error');
     }
   };
 
@@ -41,6 +61,20 @@ export function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
+              <label htmlFor="email" className="block text-sm mb-1 text-gray-700">
+                Email
+              </label>
+              <input
+                id="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError(''); }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="admin@example.com"
+                autoFocus
+              />
+            </div>
+
+            <div>
               <label htmlFor="password" className="block text-sm mb-1 text-gray-700">
                 Password
               </label>
@@ -55,7 +89,6 @@ export function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
                   }}
                   className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Enter admin password"
-                  autoFocus
                 />
                 <button
                   type="button"
@@ -70,7 +103,7 @@ export function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
 
             <div className="bg-blue-50 p-3 rounded-lg">
               <p className="text-xs text-blue-800">
-                <strong>Demo credentials:</strong> admin123
+                <strong>Demo admin:</strong> admin@example.com / admin123
               </p>
             </div>
 

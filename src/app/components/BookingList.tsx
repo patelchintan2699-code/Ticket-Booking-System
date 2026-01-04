@@ -97,7 +97,7 @@ export function BookingList({ bookings, onBack }: BookingListProps) {
                   </span>
                   <div className="text-right">
                     <span className="text-sm text-gray-600">Total Amount</span>
-                    <p className="text-green-600">${booking.totalAmount}</p>
+                    <p className="text-green-600">₹{booking.totalAmount}</p>
                   </div>
                 </div>
               </div>

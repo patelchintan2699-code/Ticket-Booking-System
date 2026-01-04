@@ -7,7 +7,7 @@ import { BookingList } from "./components/BookingList";
 import { AdminLogin } from "./components/AdminLogin";
 import { AdminDashboard } from "./components/AdminDashboard";
 import { Button } from "./components/Button";
-import { Ticket, Search, Shield } from "lucide-react";
+import { Ticket, Search } from "lucide-react";
 import { Landing } from "./components/Landing";
 import { UserLogin } from "./components/UserLogin";
 
@@ -67,6 +67,24 @@ function App() {
     fetchData();
   }, []);
 
+  // Sync with URL path for /admin route
+  useEffect(() => {
+    const syncRoute = () => {
+      const path = window.location.pathname;
+      if (path === '/admin') {
+        if (user?.role === 'admin') {
+          setCurrentStep('admin-dashboard');
+        } else {
+          setCurrentStep('admin-login');
+        }
+      }
+    };
+    syncRoute();
+    const onPop = () => syncRoute();
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [user]);
+
   // Fetch bookings for the logged-in user
   const fetchMyBookings = async (token?: string) => {
     try {
@@ -76,18 +94,33 @@ function App() {
         setBookings([]);
         return;
       }
-      const res = await fetch('http://localhost:5000/api/bookings?mine=true', {
+
+      // determine whether the current user is an admin
+      const isAdminUser = user?.role === 'admin' || (() => {
+        try {
+          const raw = localStorage.getItem('user');
+          const parsed = raw ? JSON.parse(raw) : null;
+          return parsed?.role === 'admin';
+        } catch (e) {
+          return false;
+        }
+      })();
+
+      const url = isAdminUser ? 'http://localhost:5000/api/bookings' : 'http://localhost:5000/api/bookings?mine=true';
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${t}` },
       });
+
       if (!res.ok) {
         console.error('Failed to fetch user bookings', res.status);
         setMyBookings([]);
         setBookings([]);
         return;
       }
+
       const data = await res.json();
-      setMyBookings(data);
-      // Also set shared bookings so seat availability reflects the user's bookings
+      // For admins, the API returns all bookings; keep both states in sync
+      setMyBookings(isAdminUser ? data : data);
       setBookings(data);
     } catch (err) {
       console.error('Error fetching my bookings:', err);
@@ -105,15 +138,43 @@ function App() {
   }, [user]);
 
   // Admin functions
-  const handleAdminLogin = () => {
-    setIsAdmin(true);
-    setCurrentStep("admin-dashboard");
+  const handleAdminLogin = (res?: { user: any; token: string }) => {
+    // If called with credentials (from AdminLogin) use them
+    if (res) {
+      const { user, token } = res;
+      if (user?.role === 'admin') {
+        setUser(user);
+        localStorage.setItem('user', JSON.stringify(user));
+        localStorage.setItem('token', token);
+        window.history.pushState({}, '', '/admin');
+        setIsAdmin(true);
+        setCurrentStep('admin-dashboard');
+        return;
+      } else {
+        // Not an admin — fall back to admin login view
+        setIsAdmin(false);
+        setCurrentStep('admin-login');
+        return;
+      }
+    }
+
+    // Fallback: open admin dashboard if already flagged as admin
+    if (isAdmin) {
+      window.history.pushState({}, '', '/admin');
+      setCurrentStep('admin-dashboard');
+    } else {
+      setCurrentStep('admin-login');
+    }
   };
 
   const handleAdminLogout = () => {
     setIsAdmin(false);
-    setCurrentStep("browse");
-  };
+    setCurrentStep('browse');
+    window.history.pushState({}, '', '/');
+    setUser(null);
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
+  }; 
 
   const handleAddEvent = async (eventData: Omit<Event, "id">) => {
     try {
@@ -261,8 +322,20 @@ function App() {
   };
 
   const handleOpenAdminLogin = () => {
-    setCurrentStep("admin-login");
+    window.history.pushState({}, '', '/admin');
+    setCurrentStep('admin-login');
   };
+
+  const handleSignOut = () => {
+    setUser(null);
+    setIsAdmin(false);
+    setMyBookings([]);
+    setBookings([]);
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    setCurrentStep('home');
+    window.history.pushState({}, '', '/');
+  }; 
 
   const filteredEvents = events.filter((event) => {
     const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -292,18 +365,7 @@ function App() {
               <h1>TicketBook</h1>
             </div>
             <div className="flex items-center gap-3">
-              {!isAdmin && (
-                <>
-                  <Button
-                    variant="ghost"
-                    onClick={handleOpenAdminLogin}
-                    size="sm"
-                  >
-                    <Shield className="size-4 mr-2" />
-                    Admin
-                  </Button>
-
-                    {user && (
+              {user && user.role !== 'admin' && (
                   <Button
                     variant={currentStep === "my-bookings" ? "primary" : "outline"}
                     onClick={handleViewBookings}
@@ -311,8 +373,6 @@ function App() {
                   >
                     My Bookings ({myBookings.length})
                   </Button>
-                )}
-                </>
               )}
 
               {/* User login */}
@@ -321,7 +381,7 @@ function App() {
               ) : (
                 <div className="flex items-center gap-2">
                   <span className="text-sm">Hi, {user.name}</span>
-                  <Button variant="outline" size="sm" onClick={() => { setUser(null); localStorage.removeItem('user'); }}>
+                  <Button variant="outline" size="sm" onClick={handleSignOut}>
                     Sign out
                   </Button>
                 </div>
@@ -337,14 +397,14 @@ function App() {
           <AdminLogin onLogin={handleAdminLogin} onBack={handleBackToBrowse} />
         )}
 
-        {currentStep === "login" && (
+        {currentStep === 'login' && (
           <UserLogin
-            onLogin={(res) => { setUser(res.user); localStorage.setItem('user', JSON.stringify(res.user)); localStorage.setItem('token', res.token); setCurrentStep('browse'); }}
+            onLogin={(res) => { setUser(res.user); localStorage.setItem('user', JSON.stringify(res.user)); localStorage.setItem('token', res.token); setIsAdmin(res.user?.role === 'admin'); setCurrentStep('browse'); }}
             onBack={() => setCurrentStep('home')}
           />
         )}
 
-        {currentStep === "admin-dashboard" && (
+        {currentStep === 'admin-dashboard' && (user?.role === 'admin' || isAdmin) && (
           <AdminDashboard
             events={events}
             bookings={bookings}

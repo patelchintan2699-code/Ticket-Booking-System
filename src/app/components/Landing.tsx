@@ -131,7 +131,7 @@ export function Landing({ events, onExplore }: LandingProps) {
               <h3 className="mb-1">{e.title}</h3>
               <p className="text-sm text-gray-600 mb-3">{e.date} · {e.time}</p>
               <div className="flex items-center justify-between">
-                <span className="text-blue-600 font-medium">${e.price}</span>
+                <span className="text-blue-600 font-medium">₹{e.price}</span>
                 <Button onClick={onExplore} variant="outline">View</Button>
               </div>
             </div>

@@ -81,7 +81,7 @@ export function BookingForm({ event, selectedSeats, onSubmit, onBack, initialDat
           </div>
           <div className="flex justify-between pt-2 border-t">
             <span>Total Amount:</span>
-            <span className="text-blue-600">${totalAmount}</span>
+            <span className="text-blue-600">₹{totalAmount}</span>
           </div>
         </div>
       </div>

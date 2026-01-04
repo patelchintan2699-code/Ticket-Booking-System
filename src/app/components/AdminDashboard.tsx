@@ -34,18 +34,34 @@ export function AdminDashboard({
   onDeleteEvent
 }: AdminDashboardProps) {
   const [activeView, setActiveView] = useState<AdminView>("dashboard");
-
   // Calculate statistics
-  const totalRevenue = bookings.reduce((sum, booking) => sum + booking.totalAmount, 0);
-  const totalTickets = bookings.reduce((sum, booking) => sum + booking.seats.length, 0);
+  const totalRevenue = bookings.reduce((sum, booking) => sum + (booking.totalAmount || 0), 0);
+  const totalTickets = bookings.reduce((sum, booking) => sum + (booking.seats?.length || 0), 0);
   const recentBookings = bookings.slice(-5).reverse();
 
-  const revenueByCategory = events.reduce((acc, event) => {
-    const eventBookings = bookings.filter(b => b.event.id === event.id);
-    const revenue = eventBookings.reduce((sum, b) => sum + b.totalAmount, 0);
-    acc[event.category] = (acc[event.category] || 0) + revenue;
+  // Aggregate stats by category with per-event details
+  const categoryStats = events.reduce((acc, event) => {
+    const eventBookings = bookings.filter(b => {
+      const eventRef = (b.event as any);
+      const eventId = eventRef?._id ?? eventRef ?? null;
+      return String(eventId) === String(event.id);
+    });
+
+    const revenue = eventBookings.reduce((s, b) => s + (b.totalAmount || 0), 0);
+    const tickets = eventBookings.reduce((s, b) => s + (b.seats?.length || 0), 0);
+    const bookingsCount = eventBookings.length;
+
+    if (!acc[event.category]) {
+      acc[event.category] = { revenue: 0, tickets: 0, bookings: 0, events: [] };
+    }
+
+    acc[event.category].revenue += revenue;
+    acc[event.category].tickets += tickets;
+    acc[event.category].bookings += bookingsCount;
+    acc[event.category].events.push({ ...event, revenue, tickets });
+
     return acc;
-  }, {} as Record<string, number>);
+  }, {} as Record<string, { revenue: number; tickets: number; bookings: number; events: Array<Event & { revenue: number; tickets: number }> }>);
 
   return (
     <div className="flex min-h-[calc(100vh-80px)]">
@@ -93,7 +109,7 @@ export function AdminDashboard({
           </button>
         </nav>
 
-        <div className="absolute bottom-4 left-4 right-4">
+        {/* <div className="absolute bottom-4 left-4 right-4">
           <Button
             variant="outline"
             onClick={onLogout}
@@ -102,7 +118,7 @@ export function AdminDashboard({
             <LogOut className="size-5 mr-2" />
             Logout
           </Button>
-        </div>
+        </div> */}
       </aside>
 
       {/* Main Content */}
@@ -118,7 +134,7 @@ export function AdminDashboard({
                   <span className="text-sm text-gray-600">Total Revenue</span>
                   <DollarSign className="size-5 text-green-600" />
                 </div>
-                <p className="text-green-600">${totalRevenue.toFixed(2)}</p>
+                <p className="text-green-600">₹{totalRevenue.toFixed(2)}</p>
               </div>
 
               <div className="bg-white rounded-lg shadow-md p-6">
@@ -154,21 +170,37 @@ export function AdminDashboard({
                   <h3>Revenue by Category</h3>
                 </div>
                 <div className="space-y-4">
-                  {Object.entries(revenueByCategory).map(([category, revenue]) => (
-                    <div key={category}>
-                      <div className="flex justify-between mb-1 text-sm">
-                        <span className="capitalize">{category}</span>
-                        <span className="text-blue-600">${revenue.toFixed(2)}</span>
+                  {Object.entries(categoryStats).length > 0 ? (
+                    Object.entries(categoryStats).map(([category, stat]) => (
+                      <div key={category}>
+                        <div className="flex justify-between mb-1 text-sm">
+                          <span className="capitalize">{category}</span>
+                          <span className="text-blue-600">₹{stat.revenue.toFixed(2)}</span>
+                        </div>
+
+                        <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                          <div
+                            className="bg-blue-600 h-2 rounded-full"
+                            style={{ width: `${totalRevenue ? (stat.revenue / totalRevenue) * 100 : 0}%` }}
+                          />
+                        </div>
+
+                        <div className="text-xs text-gray-600 mb-2">
+                          <span className="mr-3">{stat.bookings} booking(s)</span>
+                          <span>{stat.tickets} ticket(s)</span>
+                        </div>
+
+                        <div className="space-y-1">
+                          {stat.events.map((ev) => (
+                            <div key={ev.id} className="text-xs text-gray-700 flex justify-between">
+                              <span className="truncate">{ev.title}</span>
+                              <span className="text-gray-500">₹{ev.revenue.toFixed(2)} · {ev.tickets}t</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-blue-600 h-2 rounded-full"
-                          style={{ width: `${(revenue / totalRevenue) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                  {Object.keys(revenueByCategory).length === 0 && (
+                    ))
+                  ) : (
                     <p className="text-sm text-gray-500 text-center py-4">No revenue data yet</p>
                   )}
                 </div>
@@ -185,7 +217,7 @@ export function AdminDashboard({
                         <p className="text-xs text-gray-600">{booking.customerName}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm text-green-600">${booking.totalAmount}</p>
+                        <p className="text-sm text-green-600">₹{booking.totalAmount}</p>
                         <p className="text-xs text-gray-500">{booking.seats.length} seat(s)</p>
                       </div>
                     </div>
@@ -210,7 +242,7 @@ export function AdminDashboard({
         )}
 
         {activeView === "bookings" && (
-          <AdminBookings bookings={bookings} />
+          <AdminBookings bookings={bookings} events={events} />
         )}
       </main>
     </div>

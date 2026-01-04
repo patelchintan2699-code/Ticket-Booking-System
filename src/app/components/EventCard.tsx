@@ -58,7 +58,7 @@ export function EventCard({ event, onBookNow }: EventCardProps) {
         <div className="flex items-center justify-between">
           <div>
             <span className="text-xs text-gray-500">Starting from</span>
-            <p className="text-blue-600">${event.price}</p>
+            <p className="text-blue-600">₹{event.price}</p>
           </div>
           <Button onClick={() => onBookNow(event)}>
             Book Now
