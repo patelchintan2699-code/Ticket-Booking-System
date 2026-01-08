@@ -6,7 +6,7 @@ import {
   LayoutDashboard, 
   Calendar, 
   Ticket, 
-  DollarSign, 
+  IndianRupee , 
   Users,
   LogOut,
   TrendingUp
@@ -34,13 +34,32 @@ export function AdminDashboard({
   onDeleteEvent
 }: AdminDashboardProps) {
   const [activeView, setActiveView] = useState<AdminView>("dashboard");
+  const [showAll, setShowAll] = useState(false);
+
   // Calculate statistics
   const totalRevenue = bookings.reduce((sum, booking) => sum + (booking.totalAmount || 0), 0);
   const totalTickets = bookings.reduce((sum, booking) => sum + (booking.seats?.length || 0), 0);
   const recentBookings = bookings.slice(-5).reverse();
 
+  const isEventCompleted = (event: Event) => {
+    const parsed = Date.parse(event.date);
+    if (isNaN(parsed)) return false;
+    return parsed < Date.now();
+  };
+
+  const isEventUpcoming = (event: Event) => {
+    const parsed = Date.parse(event.date);
+    if (isNaN(parsed)) return false;
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    return parsed >= startOfToday.getTime();
+  };
+
+  // Use filtered events (show all or only future events from today) for the revenue-by-category aggregation
+  const inputEvents = events.filter(e => showAll || isEventUpcoming(e));
+
   // Aggregate stats by category with per-event details
-  const categoryStats = events.reduce((acc, event) => {
+  const categoryStats = inputEvents.reduce((acc, event) => {
     const eventBookings = bookings.filter(b => {
       const eventRef = (b.event as any);
       const eventId = eventRef?._id ?? eventRef ?? null;
@@ -132,7 +151,7 @@ export function AdminDashboard({
               <div className="bg-white rounded-lg shadow-md p-6">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm text-gray-600">Total Revenue</span>
-                  <DollarSign className="size-5 text-green-600" />
+                  <IndianRupee className="size-5 text-green-600" />
                 </div>
                 <p className="text-green-600">₹{totalRevenue.toFixed(2)}</p>
               </div>
@@ -165,9 +184,22 @@ export function AdminDashboard({
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Revenue by Category */}
               <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <TrendingUp className="size-5 text-blue-600" />
-                  <h3>Revenue by Category</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="size-5 text-blue-600" />
+                    <h3>Revenue by Category</h3>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-sm text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={showAll}
+                        onChange={(e) => setShowAll(e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                      <span>Show all events</span>
+                    </label>
+                  </div>
                 </div>
                 <div className="space-y-4">
                   {Object.entries(categoryStats).length > 0 ? (

@@ -290,7 +290,7 @@ export function EventManagement({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm mb-1 text-gray-700">Base Price ($) *</label>
+                  <label className="block text-sm mb-1 text-gray-700">Base Price (₹) *</label>
                   <input
                     type="number"
                     required

@@ -126,7 +126,7 @@ export function AdminBookings({ bookings, events }: AdminBookingsProps) {
                         key={seat.id}
                         className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-sm"
                       >
-                        {seat.id} (${((seat.price ?? ev?.price) || 0).toFixed(2)})
+                        {seat.id} (₹{((seat.price ?? ev?.price) || 0).toFixed(2)})
                       </span>
                     ))}
                   </div>
