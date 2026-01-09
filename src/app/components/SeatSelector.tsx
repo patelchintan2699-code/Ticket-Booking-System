@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "../lib/utils";
 
 export interface Seat {
@@ -10,26 +10,29 @@ export interface Seat {
 }
 
 interface SeatSelectorProps {
-  rows: number;
-  seatsPerRow: number;
+  totalSeats: number;
   basePrice: number;
   bookedSeats?: string[];
   onSeatSelect: (seats: Seat[]) => void;
 }
 
 export function SeatSelector({ 
-  rows, 
-  seatsPerRow, 
+  totalSeats, 
   basePrice,
   bookedSeats = [],
   onSeatSelect 
 }: SeatSelectorProps) {
+  //
+  // Calculate rows and seatsPerRow dynamically based on totalSeats
+  const seatsPerRow = Math.ceil(Math.sqrt(totalSeats));
+  const rows = Math.ceil(totalSeats / seatsPerRow);
+
   const [seats, setSeats] = useState<Seat[]>(() => {
     const allSeats: Seat[] = [];
     const rowLabels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    
-    for (let r = 0; r < rows; r++) {
-      for (let s = 1; s <= seatsPerRow; s++) {
+    let seatCount = 0;
+    for (let r = 0; r < rows && seatCount < totalSeats; r++) {
+      for (let s = 1; s <= seatsPerRow && seatCount < totalSeats; s++) {
         const seatId = `${rowLabels[r]}${s}`;
         const price = r < 3 ? basePrice + 20 : r < 6 ? basePrice + 10 : basePrice;
         allSeats.push({
@@ -39,9 +42,9 @@ export function SeatSelector({
           status: bookedSeats.includes(seatId) ? "booked" : "available",
           price,
         });
+        seatCount++;
       }
     }
-    
     return allSeats;
   });
 
@@ -65,6 +68,20 @@ export function SeatSelector({
   };
 
   const selectedSeats = seats.filter((s) => s.status === "selected");
+
+  // Update seat statuses when bookedSeats prop changes
+  useEffect(() => {
+    setSeats((prevSeats) =>
+      prevSeats.map((seat) => ({
+        ...seat,
+        status: bookedSeats.includes(seat.id)
+          ? "booked"
+          : seat.status === "selected"
+          ? "selected"
+          : "available",
+      }))
+    );
+  }, [bookedSeats]);
 
   return (
     <div className="space-y-6">
@@ -90,16 +107,16 @@ export function SeatSelector({
                     onClick={() => handleSeatClick(seat.id)}
                     disabled={seat.status === "booked"}
                     className={cn(
-                      "w-8 h-8 rounded-t-lg text-xs transition-all",
+                      "w-8 h-8 rounded-t-lg text-xs font-bold transition-all border-2",
                       {
-                        "bg-green-500 hover:bg-green-600 cursor-pointer": seat.status === "available",
-                        "bg-gray-300 cursor-not-allowed": seat.status === "booked",
-                        "bg-blue-600 hover:bg-blue-700 cursor-pointer": seat.status === "selected",
+                        "bg-green-500 hover:bg-green-600 cursor-pointer border-green-700 text-white shadow-md": seat.status === "available",
+                        "bg-red-600 cursor-not-allowed border-red-800 text-white opacity-100 shadow-md relative": seat.status === "booked",
+                        "bg-blue-600 hover:bg-blue-700 cursor-pointer border-blue-800 text-white shadow-lg": seat.status === "selected",
                       }
                     )}
-                    title={`${seat.id} - $${seat.price}`}
+                    title={`${seat.id} - $${seat.price}${seat.status === "booked" ? " (Booked)" : ""}`}
                   >
-                    {seat.number}
+                    {seat.status === "booked" ? "✕" : seat.number}
                   </button>
                 ))}
               </div>
@@ -112,15 +129,15 @@ export function SeatSelector({
       {/* Legend */}
       <div className="flex flex-wrap justify-center gap-6 pt-4 border-t">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-green-500 rounded-t-lg"></div>
+          <div className="w-6 h-6 bg-green-500 rounded-t-lg border-2 border-green-700 shadow-md"></div>
           <span className="text-sm">Available</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-blue-600 rounded-t-lg"></div>
+          <div className="w-6 h-6 bg-blue-600 rounded-t-lg border-2 border-blue-800 shadow-lg"></div>
           <span className="text-sm">Selected</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-gray-300 rounded-t-lg"></div>
+          <div className="w-6 h-6 bg-red-600 rounded-t-lg border-2 border-red-800 text-white flex items-center justify-center text-xs shadow-md">✕</div>
           <span className="text-sm">Booked</span>
         </div>
       </div>

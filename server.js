@@ -129,6 +129,35 @@ app.get('/api/bookings', async (req, res) => {
   }
 });
 
+// GET bookings by event ID
+app.get('/api/events/:eventId/bookings', async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    // Verify the event exists first
+    const eventExists = await Event.findById(eventId);
+    if (!eventExists) return res.status(404).json({ error: 'Event not found' });
+
+    // Find bookings where event matches (handle both object and string references)
+    const bookings = await Booking.find();
+    const filteredBookings = bookings.filter(b => {
+      const eventRef = b.event;
+      const eventId_str = (typeof eventRef === 'object' && eventRef?._id) 
+        ? eventRef._id.toString() 
+        : (typeof eventRef === 'string' ? eventRef : null);
+      return eventId_str === eventId;
+    });
+    
+    const bookingsWithId = filteredBookings.map(booking => ({ 
+      ...booking.toObject(), 
+      id: booking._id.toString() 
+    }));
+    
+    res.json(bookingsWithId);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Create booking (if Authorization header with JWT present, attach booking to user)
 app.post('/api/bookings', async (req, res) => {
   try {

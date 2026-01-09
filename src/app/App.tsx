@@ -50,6 +50,7 @@ function App() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [isAdmin, setIsAdmin] = useState(false);
   const [myBookings, setMyBookings] = useState<Booking[]>([]);
+  const [bookedSeatsForEvent, setBookedSeatsForEvent] = useState<string[]>([]);
 
   // Fetch events on mount
   useEffect(() => {
@@ -136,6 +137,37 @@ function App() {
       setBookings([]);
     }
   }, [user]);
+
+  // Fetch booked seats for selected event from API
+  useEffect(() => {
+    const fetchBookedSeats = async () => {
+      const eventId = selectedEvent?.id;
+      if (!eventId) {
+        setBookedSeatsForEvent([]);
+        return;
+      }
+
+      try {
+        const res = await fetch(`http://localhost:5000/api/events/${eventId}/bookings`);
+        if (!res.ok) {
+          console.error('Failed to fetch booked seats', res.status);
+          setBookedSeatsForEvent([]);
+          return;
+        }
+
+        const eventBookings: Booking[] = await res.json();
+        // Extract and dedupe all seat IDs from the bookings
+        const ids = eventBookings.flatMap((booking) => booking.seats.map((seat: any) => seat.id));
+        const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+        setBookedSeatsForEvent(uniqueIds);
+      } catch (err) {
+        console.error('Error fetching booked seats:', err);
+        setBookedSeatsForEvent([]);
+      }
+    };
+
+    fetchBookedSeats();
+  }, [selectedEvent?.id]);
 
   // Admin functions
   const handleAdminLogin = (res?: { user: any; token: string }) => {
@@ -283,6 +315,21 @@ function App() {
         setBookings((prev) => [...prev, bookingFromServer]);
       }
 
+      // Refresh booked seats for the selected event to show newly booked seats
+      if (selectedEvent?.id) {
+        try {
+          const res = await fetch(`http://localhost:5000/api/events/${selectedEvent.id}/bookings`);
+          if (res.ok) {
+            const eventBookings: Booking[] = await res.json();
+            const ids = eventBookings.flatMap((booking) => booking.seats.map((seat: any) => seat.id));
+            const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+            setBookedSeatsForEvent(uniqueIds);
+          }
+        } catch (err) {
+          console.error('Error refreshing booked seats:', err);
+        }
+      }
+
       setLatestBooking(bookingFromServer);
       setCurrentStep("confirmation");
     } catch (error) {
@@ -346,13 +393,6 @@ function App() {
 
   // Bookings for the logged-in user
   // `myBookings` is now managed in state (`myBookings` state) and fetched from the server when user logs in.
-
-  // Get booked seats for the selected event
-  const bookedSeatsForEvent = selectedEvent
-    ? bookings
-        .filter((b) => b.event.id === selectedEvent.id)
-        .flatMap((b) => b.seats.map((s) => s.id))
-    : [];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -501,8 +541,7 @@ function App() {
             <div className="bg-white rounded-lg shadow-md p-6">
               <h3 className="mb-6">Select Your Seats</h3>
               <SeatSelector
-                rows={8}
-                seatsPerRow={10}
+                totalSeats={selectedEvent.availableSeats}
                 basePrice={selectedEvent.price}
                 bookedSeats={bookedSeatsForEvent}
                 onSeatSelect={handleSeatSelect}
